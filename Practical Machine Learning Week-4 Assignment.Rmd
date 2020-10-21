@@ -2,8 +2,11 @@
 title: "Practical Machine Learning Week-4 Assignment"
 author: "Rupender Raj"
 date: "10/19/2020"
-output: 
-  pdf_document: 
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  pdf_document:
     toc: yes
     fig_caption: yes
     number_sections: yes
@@ -66,7 +69,8 @@ train <- train %>% select(which(colMeans(is.na(.)) < 0.95))
 test <- test %>% select(which(colMeans(is.na(.)) < 0.95))
 nam <- c("kurtosis", "skewness", "max", "min", "amplitude", "timestamp","window")
 for (i in 1:7){ train <- train[,-grep(nam[i],names(train))]}
-for (i in 1:7){ test <- test[,-grep(nam[i],names(test))]}
+nam2 <- c("timestamp","window")
+for (i in 1:2){ test <- test[,-grep(nam2[i],names(test))]}
 X_test <- test[,3:55]
 
 ```
@@ -199,7 +203,7 @@ fancyRpartPlot(DTM$finalModel)
 
 ```
 
-```{r  DTM}
+```{r  DTM R}
 set.seed(200)
 DTM_prediction<- predict(DTM, x_test)
 confusionMatrix(DTM_prediction, as.factor(y_test))
