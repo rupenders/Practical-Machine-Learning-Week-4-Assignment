@@ -1,0 +1,248 @@
+---
+title: "Practical Machine Learning Week-4 Assignment"
+author: "Rupender Raj"
+date: "10/19/2020"
+output: 
+  pdf_document: 
+    toc: yes
+    fig_caption: yes
+    number_sections: yes
+    keep_tex: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("F:/DS/ASS/ML/Practical-Machine-Learning-Week-4-Assignment")
+```
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here:    
+
+        <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har>
+
+### Data Descriptions
+
+The training data for this project are available here:
+
+   <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+The test data are available here:
+
+   <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+The data for this project come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har.
+
+## Aim
+
+
+The outcome variable is `classe`, a factor variable with 5 levels. For this data set, participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in 5 different fashions:
+
+Classe A --- exactly according to the specification
+Classe B --- throwing the elbows to the front
+Classe C --- lifting the dumbbell only halfway
+Classe D --- lowering the dumbbell only halfway 
+Classe E --- throwing the hips to the front
+
+Librarys
+
+```{r library}
+library(ggplot2)
+library(dplyr)
+library(caret)
+library(rattle)
+library(corrplot)
+library(correlationfunnel)
+
+```
+
+## Load the data  
+
+```{r load data}
+train <- read.csv("Input/pml-training.csv")
+test <- read.csv("Input/pml-testing.csv")
+
+train <- train %>% select(which(colMeans(is.na(.)) < 0.95))
+test <- test %>% select(which(colMeans(is.na(.)) < 0.95))
+nam <- c("kurtosis", "skewness", "max", "min", "amplitude", "timestamp","window")
+for (i in 1:7){ train <- train[,-grep(nam[i],names(train))]}
+for (i in 1:7){ test <- test[,-grep(nam[i],names(test))]}
+X_test <- test[,3:55]
+
+```
+
+
+## Data processing and Partion
+
+```{r process data}
+cv_tr <- createDataPartition(train$classe, p=0.65, list=FALSE)
+cvtrain <- train[cv_tr,]
+x_cvtrain <- cvtrain[,3:55]
+cvtest  <- train[-cv_tr,]
+x_test <- cvtest[,3:54]
+y_test <- cvtest[,55]
+
+```
+
+
+## Cross Validation Data Correlation
+
+```{r CVD corr}
+x_tr_corr <- cor(x_cvtrain[,1:52])
+diag(x_tr_corr) <- 0
+x_tr_corr  <- which(abs(x_tr_corr)>0.8,arr.ind = T)
+x_tr_corr_un <-unique(row.names(x_tr_corr))
+corrplot(cor(select(x_cvtrain,x_tr_corr_un)),type="upper", 
+         order="hclust",method = "number")
+```
+
+####  One important thing to note from this graph is that high correlation is only seen between the same sensor i.e. "belt","arm","forearm" and "dumbbell".As the target is a categorical variable, we cannot check correlation with the other variables directly. But we can use **correlationfunnel::correlate** to see the correlation with each level of"classe" and other features. Lets go by them one by one
+
+## Correlation with each level of"classe"
+
+### Classe "A"
+
+```{r  corr wrp classe A}
+# binarizing data
+corr_funl_cl <- x_cvtrain %>% binarize(n_bins = 4, thresh_infreq = 0.01)
+
+corr_a <- corr_funl_cl %>% correlate(target = classe__A) 
+corr_a %>% plot_correlation_funnel(interactive = T,limits = c(-0.5,0.5))
+```
+
+#### For Class "A" it seems that the "Arm and Forearm" sensors are more important.
+
+```{r  corr wrp classe A head}
+corr_a_sub <- head(corr_a %>% mutate(corr = abs(correlation)) %>% 
+                       arrange(desc(corr)) %>% select(feature) %>% unique(),20)
+corr_a_sub$feature[which(corr_a_sub$feature %in% x_tr_corr_un)]
+```
+
+#### Top 5 significant features for Classe "A" are - magnet_arm_x, pitch_forearm , magnet_dumbbell_y, roll_forearm, gyros_dumbbell_y.  
+
+
+### Classe "B"
+
+```{r  corr wrp classe B}
+corr_b <- corr_funl_cl %>% correlate(target = classe__B) 
+corr_b %>% plot_correlation_funnel(interactive = T,limits = c(-0.5,0.5))
+```
+
+#### For Class "B" it seems that the "Dumbbell and Belt" sensors are more important
+
+```{r  corr wrp classe B head}
+corr_b_sub <- head(corr_b %>% mutate(corr = abs(correlation)) %>% 
+                       arrange(desc(corr)) %>% select(feature) %>% unique(),20)
+corr_b_sub$feature[which(corr_b_sub$feature %in% x_tr_corr_un)]
+```
+
+#### Top 5 significant features for Classe "B" are - magnet_dumbbell_y, magnet_dumbbell_x , roll_dumbbell , magnet_belt_y , accel_dumbbell_x . 
+
+### Classe "C"
+
+```{r  corr wrp classe C}
+corr_c <- corr_funl_cl %>% correlate(target = classe__C) 
+corr_c %>% plot_correlation_funnel(interactive = T,limits = c(-0.5,0.5))
+```
+
+#### For Class "C" it seems that the "Dumbbell" sensors is more important
+
+```{r  corr wrp classe C head}
+corr_c_sub <- head(corr_c %>% mutate(corr = abs(correlation)) %>% 
+                       arrange(desc(corr)) %>% select(feature) %>% unique(),20)
+corr_c_sub$feature[which(corr_c_sub$feature %in% x_tr_corr_un)]
+```
+
+#### Top 5 significant features for Classe "C" are - magnet_dumbbell_y, roll_dumbbell , accel_dumbbell_y , magnet_dumbbell_x, magnet_dumbbell_z. 
+
+### Classe "D"
+
+```{r  corr wrp classe D}
+corr_d <- corr_funl_cl %>% correlate(target = classe__D) 
+corr_d %>% plot_correlation_funnel(interactive = T,limits = c(-0.5,0.5))
+```
+
+#### For Class "D" it seems that the "Forearm, Arm and Dumbbell" sensors are more important.
+
+```{r  corr wrp classe D head}
+corr_d_sub <- head(corr_d %>% mutate(corr = abs(correlation)) %>% 
+                       arrange(desc(corr)) %>% select(feature) %>% unique(),20)
+corr_d_sub$feature[which(corr_d_sub$feature %in% x_tr_corr_un)]
+```
+
+#### Top 5 significant features for Classe "D" are - pitch_forearm , magnet_arm_y , magnet_forearm_x, accel_dumbbell_y, accel_forearm_x. 
+
+### Classe "E"
+
+```{r  corr wrp classe E}
+corr_e <- corr_funl_cl %>% correlate(target = classe__E) 
+corr_e %>% plot_correlation_funnel(interactive = T,limits = c(-0.5,0.5))
+```
+
+#### For Class "E" it seems that the "Belt" sensors is more important
+
+```{r  corr wrp classe E head}
+corr_e_sub <- head(corr_e %>% mutate(corr = abs(correlation)) %>% 
+                       arrange(desc(corr)) %>% select(feature) %>% unique(),20)
+corr_e_sub$feature[which(corr_e_sub$feature %in% x_tr_corr_un)]
+```
+
+#### Top 5 significant features for Classe "C" are - magnet_belt_y , magnet_belt_z , roll_belt, gyros_belt_z , magnet_dumbbell_y.
+
+#### we could use only the non corelated predictor from above for the Machine learning models. since we would like to test the diffrent Machine learning model we will consider all the predictor.,,
+
+## Decision Tree Model and Prediction
+
+```{r  DTM}
+DTM<- train(classe ~. , data=x_cvtrain, method= "rpart")
+fancyRpartPlot(DTM$finalModel)
+
+```
+
+```{r  DTM}
+set.seed(200)
+DTM_prediction<- predict(DTM, x_test)
+confusionMatrix(DTM_prediction, as.factor(y_test))
+```
+
+#### From the Decision Tree Model we see the prediction accuracy is 50% which is not upto satisfactory level.Clearly Classification tree is not performing well, accuracy is very low. One thing to note here is that True classe_A are detected with high accuracy, but other classe are incorrectly predicted as classe A.
+
+## Random Forest Model and Prediction
+
+```{r  RF}
+RF <- train(classe ~. , data=x_cvtrain, method= "rf", ntree=100)
+set.seed(200)
+RF_prediction<- predict(RF, x_test)
+RF_CM <- confusionMatrix(RF_prediction, as.factor(y_test))
+RF_CM
+```
+
+```{r  RF plot}
+plot(RF_CM$table, col=RF_CM$byClass, main="Random Forest Accuracy")
+```
+
+#### Random Forest took the lead with 99%+ accuracy.
+
+## Gradient Boosting Model and Prediction
+
+```{r GBMM}
+GBMM <- train(classe~., data=x_cvtrain, method="gbm", verbose= FALSE)
+set.seed(200)
+GBMM_prediction<- predict(GBMM, x_test)
+confusionMatrix(GBMM_prediction, as.factor(y_test))
+```
+
+#### Gradient Boosting Model took the lead with 96%+ accuracy which is less than Random Forest.
+
+## Conclution
+
+#### Random Forest is best model.
+
+#### Test data Results.
+```{r  Test Results}
+result <- data.frame("problem_id" = X_test$problem_id,
+                     "PREDICTION_DTM" = predict(DTM,X_test[,1:52]),
+                     "PREDICTION_RF" = predict(RF,X_test[,1:52]),
+                     "PREDICTION_GBM" = predict(GBMM,X_test[,1:52]))
+result
+```
